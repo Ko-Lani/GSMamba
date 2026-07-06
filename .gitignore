@@ -12,10 +12,12 @@ results/
 # Pretrained / downloaded checkpoints
 pretrained/*
 !pretrained/gsmamba_reds_x4.pth
+!pretrained/spynet_sintel.pth
 *.pth
 *.pt
 *.ckpt
 !pretrained/gsmamba_reds_x4.pth
+!pretrained/spynet_sintel.pth
 
 # OS / editor
 .DS_Store
