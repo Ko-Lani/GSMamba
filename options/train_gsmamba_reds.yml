@@ -1,0 +1,109 @@
+# GSMamba (formerly MambaVSRv6) - REDS x4 video super-resolution, full training recipe.
+# This is the config that produced the final released checkpoint (pretrained/gsmamba_reds_x4.pth,
+# 600,000 iterations). Originally options/multi/MambaVSRv6_mix_precision_REDS_600K_N16_multi.yml
+# in the RethinkVSRAlignment repo; cleaned up here to start from scratch (no resume state) and
+# to point at this repo's own paths.
+name: GSMamba_REDS_600K_N16_multi
+
+model_type: RecurrentMixPrecisionRTModel
+scale: 4
+num_gpu: 8  # official recipe: 8 GPUs
+manual_seed: 0
+find_unused_parameters: false
+use_static_graph: true
+
+datasets:
+  train:
+    name: REDS
+    type: REDSRecurrentDataset
+    dataroot_gt: /hdd/laniko/Dataset/REDS_dataset/REDS/train/train_sharp
+    dataroot_lq: /hdd/laniko/Dataset/REDS_dataset/REDS/train/train_sharp_bicubic/X4
+    meta_info_file: /hdd/laniko/ACCV2026/GSMamba/basicsr/data/meta_info_REDS_GT.txt
+    val_partition: REDS4  # set to 'official' to use the official validation partition
+    test_mode: False
+    io_backend:
+      type: disk
+
+    num_frame: 16
+    gt_size: 256
+    interval_list: [1]
+    random_reverse: false
+    use_hflip: true
+    use_rot: true
+
+    use_shuffle: true
+    num_worker_per_gpu: 6
+    batch_size_per_gpu: 1
+    dataset_enlarge_ratio: 1
+    prefetch_mode: ~
+
+  val:
+    name: REDS4
+    type: VideoRecurrentTestDataset
+    dataroot_gt: /hdd/laniko/Dataset/REDS_dataset/REDS4/GT
+    dataroot_lq: /hdd/laniko/Dataset/REDS_dataset/REDS4/sharp_bicubic
+    cache_data: true
+    io_backend:
+      type: disk
+    num_frame: -1  # not needed
+
+network_g:
+  type: GSMamba
+  upscale: 4
+  prop_depth: 4
+  attn_depth: 4
+  pa_frame: 2
+  embed_dims: 192
+  num_heads: 8
+  use_checkpoint_attn: True
+  spynet_path: /hdd/laniko/ACCV2026/GSMamba/pretrained/spynet_sintel.pth
+
+path:
+  pretrain_network_g: ~
+  strict_load_g: true
+  resume_state: ~
+
+train:
+  ema_decay: 0.999
+  optim_g:
+    type: Adam
+    lr: !!float 2e-4
+    weight_decay: 0
+    betas: [0.9, 0.99]
+
+  scheduler:
+    type: CosineAnnealingRestartLR
+    periods: [600000]
+    restart_weights: [1]
+    eta_min: !!float 1e-7
+
+  total_iter: 600000
+  warmup_iter: -1  # no warm up
+  fix_flow: 5000
+  flow_lr_mul: 0.125
+
+  pixel_opt:
+    type: CharbonnierLoss
+    loss_weight: 1.0
+    reduction: mean
+
+val:
+  val_freq: !!float 5e10
+  save_img: false
+  metrics:
+    psnr:
+      type: calculate_psnr
+      crop_border: 0
+      test_y_channel: false
+
+logger:
+  print_freq: 10
+  save_checkpoint_freq: !!float 1e3
+  use_tb_logger: true
+  wandb:
+    project: gsmamba_reds
+    resume_id: ~
+
+dist_params:
+  backend: nccl
+  port: 29500

@@ -1,0 +1,116 @@
+# GSMamba ablation - window size K=3 (pa_frame=1; K = 2*pa_frame + 1).
+# Standard ablation-compute recipe (6-frame clips, half LR) mirroring the OTHER
+# successfully-completed *_300K_N6_multi.yml ablations in RethinkVSRAlignment -- NOT the
+# settings of the one prior K=3 attempt (options/multi/MambaVSRv6_pa1_mix_precision_REDS_300K_N6_multi.yml),
+# which used an unscaled lr=2e-4, 2 GPUs x batch 4, and use_checkpoint_attn=False, and NaN'd
+# out at iter ~16.3K (loss was healthy right up to the previous step, then permanently NaN --
+# see chat discussion). grad_clip_norm is a new opt-in safeguard (see
+# models/recurrent_mixprecision_model.py) since the training loop otherwise has no gradient
+# clipping anywhere, so nothing stops a single bad batch from corrupting the weights for good.
+# Single-GPU run (batch_size_per_gpu kept at 1, so global batch = 1, 8x smaller than the
+# 8-GPU recipe this mirrors) and cut to 100K iters -- not enough time to run out to 300K.
+name: GSMamba_ablation_K3_REDS_300K_N6_1gpu
+
+model_type: RecurrentMixPrecisionRTModel
+scale: 4
+num_gpu: 1
+manual_seed: 0
+find_unused_parameters: false
+use_static_graph: true
+
+datasets:
+  train:
+    name: REDS
+    type: REDSRecurrentDataset
+    dataroot_gt: /hdd/laniko/Dataset/REDS_dataset/REDS/train/train_sharp
+    dataroot_lq: /hdd/laniko/Dataset/REDS_dataset/REDS/train/train_sharp_bicubic/X4
+    meta_info_file: /hdd/laniko/ACCV2026/GSMamba/basicsr/data/meta_info_REDS_GT.txt
+    val_partition: REDS4
+    test_mode: False
+    io_backend:
+      type: disk
+
+    num_frame: 6
+    gt_size: 256
+    interval_list: [1]
+    random_reverse: false
+    use_hflip: true
+    use_rot: true
+
+    use_shuffle: true
+    num_worker_per_gpu: 6
+    batch_size_per_gpu: 1
+    dataset_enlarge_ratio: 1
+    prefetch_mode: ~
+
+  val:
+    name: REDS4
+    type: VideoRecurrentTestDataset
+    dataroot_gt: /hdd/laniko/Dataset/REDS_dataset/REDS4/GT
+    dataroot_lq: /hdd/laniko/Dataset/REDS_dataset/REDS4/sharp_bicubic
+    cache_data: true
+    io_backend:
+      type: disk
+    num_frame: -1
+
+network_g:
+  type: GSMamba
+  upscale: 4
+  prop_depth: 4
+  attn_depth: 4
+  pa_frame: 1   # K = 2*1 + 1 = 3
+  embed_dims: 192
+  num_heads: 8
+  use_checkpoint_attn: False
+  spynet_path: /hdd/laniko/ACCV2026/GSMamba/pretrained/spynet_sintel.pth
+
+path:
+  pretrain_network_g: ~
+  strict_load_g: true
+  resume_state: ~
+
+train:
+  ema_decay: 0.999
+  grad_clip_norm: 1.0   # opt-in safeguard, see note above
+  optim_g:
+    type: Adam
+    lr: !!float 1e-4    # halved vs. the main K=5 recipe, matching every other stable ablation
+    weight_decay: 0
+    betas: [0.9, 0.99]
+
+  scheduler:
+    type: CosineAnnealingRestartLR
+    periods: [300000]
+    restart_weights: [1]
+    eta_min: !!float 1e-7
+
+  total_iter: 300000
+  warmup_iter: -1
+  fix_flow: 5000
+  flow_lr_mul: 0.125
+
+  pixel_opt:
+    type: CharbonnierLoss
+    loss_weight: 1.0
+    reduction: mean
+
+val:
+  val_freq: !!float 5e10
+  save_img: false
+  metrics:
+    psnr:
+      type: calculate_psnr
+      crop_border: 0
+      test_y_channel: false
+
+logger:
+  print_freq: 10
+  save_checkpoint_freq: !!float 1e3
+  use_tb_logger: true
+  wandb:
+    project: gsmamba_reds_ablation_accv2026
+    resume_id: ~
+
+dist_params:
+  backend: nccl
+  port: 29500
