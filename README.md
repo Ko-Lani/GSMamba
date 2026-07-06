@@ -54,3 +54,20 @@ python setup.py install
 ```bash
 pip install opencv-python timm tensorboard wandb matplotlib
 ```
+
+## Dataset Preparation
+
+### REDS
+
+Download REDS via [Git LFS](https://huggingface.co/datasets/ubin108/REDS) from Hugging Face:
+
+```bash
+apt update
+apt install git-lfs -y
+git lfs install
+
+GIT_LFS_PROGRESS=1 git clone https://huggingface.co/datasets/ubin108/REDS
+mv REDS Dataset
+cd Dataset
+git lfs pull
+```
