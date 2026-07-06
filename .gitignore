@@ -10,10 +10,12 @@ wandb/
 results/
 
 # Pretrained / downloaded checkpoints
-pretrained/
+pretrained/*
+!pretrained/gsmamba_reds_x4.pth
 *.pth
 *.pt
 *.ckpt
+!pretrained/gsmamba_reds_x4.pth
 
 # OS / editor
 .DS_Store
